@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Llama Bridge — Let Claude Hand Off the Small Stuff</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#30363d;
+    --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --good:#3fb950;
+    --warn:#d29922; --bad:#f85149; --chip:#21262d;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{padding:56px 20px 40px;text-align:center;
+         background:radial-gradient(ellipse 90% 70% at 50% 0%, #14243a 0%, var(--bg) 70%)}
+  header .llama{font-size:52px;line-height:1}
+  header h1{font-size:34px;margin:14px 0 8px;font-weight:750;letter-spacing:.2px}
+  header p.tag{color:var(--muted);font-size:18px;max-width:620px;margin:0 auto}
+  nav{position:sticky;top:0;z-index:10;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);
+      border-bottom:1px solid var(--border);display:flex;gap:4px;justify-content:center;
+      flex-wrap:wrap;padding:10px 8px}
+  nav a{font-size:13px;color:var(--muted);padding:5px 12px;border-radius:999px}
+  nav a:hover{color:var(--text);background:var(--chip);text-decoration:none}
+  main{max-width:880px;margin:0 auto;padding:12px 20px 60px}
+  section{margin-top:52px}
+  h2{font-size:24px;margin:0 0 6px;font-weight:700}
+  h2 .num{color:var(--accent);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;
+          vertical-align:middle;margin-right:8px}
+  .sub{color:var(--muted);margin:0 0 18px;font-size:15px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 22px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+  .cards .card h3{margin:0 0 6px;font-size:16px}
+  .cards .card p{margin:0;color:var(--muted);font-size:14px}
+  .big{font-size:26px;margin-bottom:4px}
+  .steps{counter-reset:s;display:grid;gap:12px;margin-top:14px}
+  .step{display:flex;gap:16px;background:var(--panel);border:1px solid var(--border);
+        border-radius:12px;padding:16px 18px}
+  .step::before{counter-increment:s;content:counter(s);flex:0 0 34px;height:34px;
+        display:flex;align-items:center;justify-content:center;border-radius:50%;
+        background:var(--chip);border:1px solid var(--border);color:var(--accent);
+        font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .step h3{margin:0 0 4px;font-size:15px}
+  .step p{margin:0;color:var(--muted);font-size:14px}
+  .flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;
+        margin:20px 0 6px;font-size:14px}
+  .node{background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+        padding:10px 14px;text-align:center;min-width:110px}
+  .node b{display:block;font-size:14px}
+  .node span{color:var(--muted);font-size:12px}
+  .arrow{color:var(--accent);font-size:20px}
+  pre{background:#0b0f14;border:1px solid var(--border);border-radius:10px;padding:14px 16px;
+      overflow-x:auto;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      position:relative;margin:10px 0}
+  .copybtn{position:absolute;top:8px;right:8px;background:var(--chip);color:var(--muted);
+      border:1px solid var(--border);border-radius:7px;padding:3px 10px;font-size:12px;cursor:pointer}
+  .copybtn:hover{color:var(--text)}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:10px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;
+        background:var(--chip);border:1px solid var(--border);color:var(--muted)}
+  .pill.g{color:var(--good);border-color:rgba(63,185,80,.4)}
+  .pill.b{color:var(--accent);border-color:rgba(88,166,255,.4)}
+  .pill.v{color:var(--warn);border-color:rgba(210,153,34,.4)}
+  .glossary{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:14px}
+  .term{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .term b{color:var(--accent);font-size:14px}
+  .term p{margin:4px 0 0;color:var(--muted);font-size:13px}
+  .calc{display:grid;gap:16px}
+  .calc label{font-size:14px;color:var(--muted);display:block;margin-bottom:4px}
+  .calc .val{color:var(--text);font-weight:600;float:right}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .result{background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+      padding:16px;text-align:center}
+  .result .n{font-size:32px;font-weight:750;color:var(--good)}
+  .result .l{color:var(--muted);font-size:13px}
+  .livegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:14px}
+  .stat{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+  .stat .n{font-size:22px;font-weight:700}
+  .stat .l{color:var(--muted);font-size:12px;margin-top:2px}
+  details{background:var(--panel);border:1px solid var(--border);border-radius:10px;
+      padding:0 18px;margin-top:10px}
+  summary{cursor:pointer;padding:14px 0;font-weight:600;font-size:15px;list-style:none}
+  summary::before{content:"+";color:var(--accent);font-weight:700;margin-right:10px;
+      display:inline-block;width:14px}
+  details[open] summary::before{content:"–"}
+  details p{margin:0 0 14px;color:var(--muted);font-size:14px}
+  .callout{border-left:3px solid var(--accent);background:var(--panel);border-radius:0 10px 10px 0;
+      padding:12px 16px;margin:14px 0;font-size:14px;color:var(--muted)}
+  .callout.warn{border-left-color:var(--warn)}
+  footer{border-top:1px solid var(--border);color:var(--muted);text-align:center;
+      font-size:13px;padding:24px;margin-top:40px}
+  @media(max-width:640px){ header h1{font-size:26px} .flow{flex-direction:column} .arrow{transform:rotate(90deg)} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="llama">&#129433;</div>
+  <h1>Llama Bridge</h1>
+  <p class="tag">A tiny tool that lets Claude hand off simple jobs to free AI models running on your own computer &mdash; and shows you the receipts.</p>
+</header>
+
+<nav>
+  <a href="#what">What is it</a>
+  <a href="#why">Why bother</a>
+  <a href="#how">How it works</a>
+  <a href="#install">Install</a>
+  <a href="#models">Which models</a>
+  <a href="#calc">Savings</a>
+  <a href="#live">Live test</a>
+  <a href="#faq">FAQ</a>
+</nav>
+
+<main>
+
+<section id="what">
+  <h2><span class="num">01</span>What is Llama Bridge?</h2>
+  <p>Imagine Claude as a brilliant expert you pay by the word. Every word Claude writes costs money. But a lot of everyday work doesn't need an expert. Summarizing notes, sorting lists, cleaning up text &mdash; a smaller, free helper can do those jobs just fine.</p>
+  <p>That's where <b>Ollama</b> comes in. Ollama is a free app that runs smaller AI models right on your computer. They cost nothing to use. Llama Bridge is the connector between the two: when Claude hits a simple chore, it passes the chore to a local model, checks the answer, and keeps the savings on record.</p>
+  <p>It's like doing small household chores yourself instead of paying a contractor for every one of them. The contractor (Claude) still handles the wiring and the plumbing. The easy stuff stays in-house, for free &mdash; and Llama Bridge keeps track of every dollar you didn't spend.</p>
+  <div class="callout">One Python file. No installs beyond Python and Ollama. It runs an <b>MCP server</b> (so Claude can use it as a tool) and a <b>web dashboard</b> (so you can watch it work at <span class="mono">http://127.0.0.1:8765</span>).</div>
+</section>
+
+<section id="why">
+  <h2><span class="num">02</span>Why bother?</h2>
+  <p class="sub">Four reasons people run it.</p>
+  <div class="cards">
+    <div class="card"><div class="big">&#128176;</div><h3>Save money</h3><p>Cloud AI charges for every token it writes. Local models write for free. Routine work adds up fast &mdash; especially repeated jobs like classifying hundreds of rows.</p></div>
+    <div class="card"><div class="big">&#127968;</div><h3>Keep data at home</h3><p>Work sent to a local model never leaves your computer. For some jobs, that alone is the reason.</p></div>
+    <div class="card"><div class="big">&#9989;</div><h3>Trust, but verify</h3><p>Every handoff can be checked automatically: is it valid JSON? Does it include the right words? Is it long enough? Failed checks get retried on a bigger model.</p></div>
+    <div class="card"><div class="big">&#128202;</div><h3>See the receipts</h3><p>Every delegation is logged. The dashboard shows tokens saved, cost avoided, speed, and which models actually do good work.</p></div>
+  </div>
+</section>
+
+<section id="how">
+  <h2><span class="num">03</span>How it works</h2>
+  <p class="sub">The whole trip takes a few seconds.</p>
+  <div class="flow">
+    <div class="node"><b>Claude</b><span>spots a simple subtask</span></div>
+    <div class="arrow">&#8594;</div>
+    <div class="node"><b>Llama Bridge</b><span>picks a model, sends the job</span></div>
+    <div class="arrow">&#8594;</div>
+    <div class="node"><b>Ollama</b><span>runs it locally, free</span></div>
+    <div class="arrow">&#8594;</div>
+    <div class="node"><b>Checks</b><span>verify the answer</span></div>
+    <div class="arrow">&#8594;</div>
+    <div class="node"><b>Claude</b><span>uses the result</span></div>
+  </div>
+  <div class="steps">
+    <div class="step"><div><h3>Claude decides what to hand off</h3><p>Only simple, well-defined chores get delegated: summarize, classify, extract, reformat, draft. The hard thinking stays with Claude.</p></div></div>
+    <div class="step"><div><h3>The bridge picks the right model</h3><p>It matches the job's <i>family</i> first (code jobs go to coder models, image jobs to vision models, everything else to general models), then picks the smallest size that can handle it.</p></div></div>
+    <div class="step"><div><h3>The answer gets checked</h3><p>The bridge runs automatic checks on the output. If a check fails, it retries once on a bigger model. If it still fails, the answer is flagged <span class="mono">[UNVERIFIED]</span> and Claude does the job itself instead.</p></div></div>
+    <div class="step"><div><h3>Everything is logged</h3><p>Each handoff is saved: the prompt, the answer, how long it took, and roughly what it saved. Repeat questions come back instantly from a cache. A scoreboard learns which models are good at which jobs.</p></div></div>
+  </div>
+
+  <h2 style="font-size:18px;margin-top:30px">Words you'll see</h2>
+  <div class="glossary">
+    <div class="term"><b>token</b><p>The small pieces of text AI models read and write &mdash; and what cloud AI charges for.</p></div>
+    <div class="term"><b>local model</b><p>An AI model that runs on your own computer instead of in the cloud.</p></div>
+    <div class="term"><b>MCP</b><p>Model Context Protocol &mdash; the standard plug that lets Claude connect to outside tools like this one.</p></div>
+    <div class="term"><b>cache</b><p>A saved answer that gets reused when the exact same question is asked again. Instant and free.</p></div>
+    <div class="term"><b>escalation</b><p>Retrying a failed job on a bigger, smarter model &mdash; automatically.</p></div>
+    <div class="term"><b>[UNVERIFIED]</b><p>A warning tag meaning the answer failed its checks. Claude should redo that job itself. The tag is the safety net working.</p></div>
+  </div>
+</section>
+
+<section id="install">
+  <h2><span class="num">04</span>How to install it</h2>
+  <p class="sub">Three steps. You need Python 3.8+ and about ten minutes.</p>
+
+  <div class="steps">
+    <div class="step"><div><h3>Install Ollama and pull a starter model</h3><p>Download Ollama from <a href="https://ollama.com" target="_blank" rel="noopener">ollama.com</a> and install it. Then open a terminal and pull a small model:</p>
+      <pre><button class="copybtn" onclick="copy(this)">Copy</button>ollama pull llama3.2:3b</pre></div></div>
+    <div class="step"><div><h3>Get the MCP config from the bridge</h3><p>Put <span class="mono">llama_bridge.py</span> in a folder it can stay in, then run:</p>
+      <pre><button class="copybtn" onclick="copy(this)">Copy</button>python llama_bridge.py install</pre>
+      <p>It prints a small block of JSON. Paste that into your Claude MCP config file (for the desktop app that's <span class="mono">claude_desktop_config.json</span>), or run the <span class="mono">claude mcp add</span> command it prints if you use Claude Code.</p></div></div>
+    <div class="step"><div><h3>Restart Claude and start the dashboard</h3><p>Restart Claude so it loads the new tools. Then start the dashboard to watch delegations happen live:</p>
+      <pre><button class="copybtn" onclick="copy(this)">Copy</button>python llama_bridge.py</pre>
+      <p>It opens at <a href="http://127.0.0.1:8765" target="_blank" rel="noopener" class="mono">http://127.0.0.1:8765</a>. Ask Claude to "check ollama_status" to confirm the connection works.</p></div></div>
+  </div>
+  <div class="callout warn">If Ollama is off or no model is installed, nothing breaks. Delegation is a bonus, not a requirement &mdash; Claude just does the work itself.</div>
+</section>
+
+<section id="models">
+  <h2><span class="num">05</span>Which models should you install?</h2>
+  <p class="sub">The golden rule: match the model's <b>family</b> to the job first, then pick the smallest <b>size</b> that gets it done. Bigger is not always better &mdash; a mid-size general model usually beats a huge coding model at everyday writing tasks.</p>
+  <table>
+    <thead><tr><th>Model</th><th>Size</th><th>Family</th><th>Best at</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">llama3.2:3b</td><td>~2&nbsp;GB</td><td><span class="pill g">general</span></td><td>Quick, high-volume chores: yes/no sorting, tiny reformats, simple labels. Start here.</td></tr>
+      <tr><td class="mono">qwen2.5:7b</td><td>~4.4&nbsp;GB</td><td><span class="pill g">general</span></td><td>Everyday summaries, drafts, extraction, and simple structured output.</td></tr>
+      <tr><td class="mono">gemma (12B class)</td><td>~7&nbsp;GB</td><td><span class="pill g">general</span></td><td>Broader knowledge, multi-step instructions, cleaner JSON. The reliable middle.</td></tr>
+      <tr><td class="mono">qwen3-coder:30b</td><td>~17&nbsp;GB</td><td><span class="pill b">coder</span></td><td>Real code and the hardest jobs. Slow &mdash; the bridge runs it in the background.</td></tr>
+      <tr><td class="mono">qwen3-vl / llama3.2-vision</td><td>~6&ndash;7&nbsp;GB</td><td><span class="pill v">vision</span></td><td>Anything with images or screenshots. Text-only models literally cannot see.</td></tr>
+    </tbody>
+  </table>
+  <p style="color:var(--muted);font-size:14px;margin-top:12px">A good starter set is one small general model, one mid-size general model, and whichever specialist (coder or vision) matches your work. Your computer needs enough free RAM to hold the model &mdash; roughly the file size plus a little headroom.</p>
+</section>
+
+<section id="calc">
+  <h2><span class="num">06</span>What could you save?</h2>
+  <p class="sub">Move the sliders. Savings are the cloud output price you skip, minus the small input price Claude pays to read the local model's answer back.</p>
+  <div class="card calc">
+    <div>
+      <label>Delegations per day <span class="val" id="vTasks">25</span></label>
+      <input type="range" id="rTasks" min="1" max="500" value="25" oninput="calc()">
+    </div>
+    <div>
+      <label>Average answer length (tokens) <span class="val" id="vToks">400</span></label>
+      <input type="range" id="rToks" min="50" max="2000" step="50" value="400" oninput="calc()">
+    </div>
+    <div>
+      <label>Cloud price: output $<span id="vOut">15</span> / input $<span id="vIn">3</span> per million tokens</label>
+      <input type="range" id="rOut" min="1" max="75" value="15" oninput="calc()">
+    </div>
+    <div class="result">
+      <div class="n" id="rMonth">$0</div>
+      <div class="l">estimated savings per month &mdash; <span id="rYear">$0</span> per year</div>
+    </div>
+  </div>
+</section>
+
+<section id="live">
+  <h2><span class="num">07</span>Proof: this page was a live test</h2>
+  <p class="sub">While building this page, Claude delegated two real drafting jobs through Llama Bridge. Both passed their checks on the first try &mdash; no escalation needed.</p>
+  <table>
+    <thead><tr><th>Job</th><th>Model</th><th>Checks</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Draft the "chores at home" analogy in section 01</td><td class="mono">qwen2.5:7b</td><td class="mono">must_include, min_length 350</td><td><span class="pill g">verified</span></td></tr>
+      <tr><td>Draft the glossary definitions in section 03</td><td class="mono">llama3.2:3b</td><td class="mono">require_json, must_include &times;5</td><td><span class="pill g">verified</span></td></tr>
+    </tbody>
+  </table>
+  <div class="livegrid">
+    <div class="stat"><div class="n">2</div><div class="l">jobs delegated</div></div>
+    <div class="stat"><div class="n">694</div><div class="l">tokens offloaded to Ollama</div></div>
+    <div class="stat"><div class="n">~335</div><div class="l">Claude tokens not generated</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">failures</div></div>
+    <div class="stat"><div class="n">6.6s</div><div class="l">avg. round trip</div></div>
+  </div>
+  <p style="color:var(--muted);font-size:14px;margin-top:12px">Two small jobs save well under a penny &mdash; that's honest math. The point isn't one page. It's that routine work happens hundreds of times, and the meter runs in your favor every time. Claude reviewed and lightly edited both drafts before they went in, which is exactly how the system is meant to work: local models draft, Claude judges.</p>
+</section>
+
+<section id="faq">
+  <h2><span class="num">08</span>Common questions</h2>
+  <details><summary>Is it really free to run?</summary><p>The local models are free to download and run. The "cost" is your computer's RAM and a few seconds per job. You still pay normally for what Claude itself does.</p></details>
+  <details><summary>Does my data leave my computer?</summary><p>Work delegated to a local model runs entirely on your machine. The conversation with Claude itself still works like it always does &mdash; the bridge only changes where the small jobs run.</p></details>
+  <details><summary>What happens if Ollama is off?</summary><p>Nothing bad. The bridge reports it can't reach Ollama, and Claude simply does the work itself. Delegation is an optimization, never a dependency.</p></details>
+  <details><summary>Can I trust the local model's answers?</summary><p>Trust the checks, not the model. Ask for verification (valid JSON, required words, minimum length) on anything that matters. Failed checks retry on a bigger model, and anything still failing is flagged <span class="mono">[UNVERIFIED]</span> so Claude redoes it.</p></details>
+  <details><summary>Why did a job come back tagged [UNVERIFIED]?</summary><p>The answer failed its checks even after a retry. Don't use it &mdash; that tag is the safety net catching a bad answer before it reaches you.</p></details>
+  <details><summary>How big a computer do I need?</summary><p>A 3B model runs on almost anything with 8 GB of RAM. Mid-size models (7&ndash;12B) like 16 GB. The 30B specialists want 24+ GB or a good GPU. Start small &mdash; small models handle most delegated work.</p></details>
+  <details><summary>Where do I see what it's been doing?</summary><p>Run <span class="mono">python llama_bridge.py</span> and open the dashboard. Every delegation is there: prompt, answer, time, tokens saved, and a &#128077;/&#128078; rating you can give so model picking keeps improving.</p></details>
+</section>
+
+</main>
+
+<footer>Llama Bridge &mdash; one Python file, zero dependencies, receipts included. &#129433;</footer>
+
+<script>
+function copy(btn){
+  var text = btn.parentElement.textContent.replace(/^Copy/, '').trim();
+  function done(ok){ var o=btn.textContent; btn.textContent = ok?'Copied!':'Failed';
+    setTimeout(function(){ btn.textContent=o; }, 1200); }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){done(true);},function(){done(false);});
+  } else {
+    var ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+    ta.select(); try{ document.execCommand('copy'); done(true); }catch(e){ done(false); }
+    ta.remove();
+  }
+}
+function calc(){
+  var tasks = +document.getElementById('rTasks').value;
+  var toks  = +document.getElementById('rToks').value;
+  var out   = +document.getElementById('rOut').value;
+  var inp   = out / 5;                       // typical in:out price ratio
+  document.getElementById('vTasks').textContent = tasks;
+  document.getElementById('vToks').textContent  = toks;
+  document.getElementById('vOut').textContent   = out;
+  document.getElementById('vIn').textContent    = (Math.round(inp*10)/10);
+  var perTok = Math.max(out - inp, 0) / 1e6;   // net $ per output token skipped
+  var month  = tasks * toks * perTok * 30;
+  var year   = month * 12;
+  function fmt(n){ return n >= 100 ? '$'+Math.round(n).toLocaleString()
+                                   : '$'+n.toFixed(2); }
+  document.getElementById('rMonth').textContent = fmt(month);
+  document.getElementById('rYear').textContent  = fmt(year);
+}
+calc();
+</script>
+</body>
+</html>
